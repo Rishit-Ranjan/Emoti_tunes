@@ -1,3 +1,4 @@
+// BUILD VERSION: 1.0.1-FORCE-DEPLOY
 const IS_PRODUCTION = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
 const FOUNDRY_BASE_URL = IS_PRODUCTION ? 'http://127.0.0.1:11434' : '/api/foundry';
 const MODEL_NAME = 'llava:latest';
