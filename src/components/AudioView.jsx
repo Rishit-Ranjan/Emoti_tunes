@@ -135,34 +135,44 @@ const AudioView = ({ onCapture, onClose, onError }) => {
     const handleStopRecording = () => {
         stopRecording();
     };
-    return (<div className="w-full max-w-md mx-auto flex flex-col items-center text-center p-8 rounded-2xl border border-slate-700 bg-slate-800/50 shadow-lg">
-            <h2 className="text-3xl font-bold text-slate-100 mb-2">Voice Analysis</h2>
-            <p className="text-slate-400 mb-8">
-                {isRecording ? "Speak clearly for a few seconds." : "Record your voice to detect your current mood."}
+    return (
+        <div className="w-full max-w-lg mx-auto flex flex-col items-center text-center p-12 rounded-3xl bg-gradient-to-b from-[#181818] to-black shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/5 animate-in slide-in-from-bottom-8 duration-500">
+            <h2 className="text-4xl font-black text-white mb-2 tracking-tighter">Analyze Mood</h2>
+            <p className="text-[#a7a7a7] text-lg font-medium mb-12">
+                {isRecording ? "Listening to your tone..." : "Express yourself for a moment."}
             </p>
 
-            <div className="relative w-48 h-48 flex items-center justify-center mb-8">
+            <div className="relative w-64 h-64 flex items-center justify-center mb-12 group">
                 {isRecording && (
-                    <div className="absolute inset-0 flex items-center justify-center gap-1">
-                        {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
-                            <div key={i} className="w-1.5 bg-green-500 rounded-full animate-pulse" style={{ height: `${Math.random() * 60 + 20}%`, animationDelay: `${i * 0.1}s` }}></div>
+                    <div className="absolute inset-0 flex items-center justify-center gap-2">
+                        {[1, 2, 3, 4, 12, 6, 7, 8, 9, 10, 11, 12].map(i => (
+                            <div key={i} className="w-2.5 bg-[#1db954] rounded-full animate-pulse shadow-[0_0_15px_rgba(29,185,84,0.3)] transition-all duration-300" 
+                                 style={{ 
+                                     height: `${Math.random() * 80 + 10}%`, 
+                                     animationDuration: `${Math.random() * 0.5 + 0.3}s`,
+                                     opacity: 0.6 + Math.random() * 0.4
+                                 }}></div>
                         ))}
                     </div>
                 )}
-                <button onClick={isRecording ? handleStopRecording : handleStartRecording} className={`z-10 w-36 h-36 rounded-full flex flex-col items-center justify-center text-white transition-all duration-300 ${isRecording ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'} focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-offset-slate-800 ${isRecording ? 'focus:ring-red-500' : 'focus:ring-green-500'}`} aria-label={isRecording ? "Stop recording and analyze" : "Start recording"}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        {isRecording ? (<path strokeLinecap="round" strokeLinejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25-2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z"/>) : (<path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>)}
+                <button 
+                    onClick={isRecording ? handleStopRecording : handleStartRecording} 
+                    className={`z-10 w-44 h-44 rounded-full flex flex-col items-center justify-center text-white transition-all duration-500 shadow-2xl relative ${isRecording ? 'bg-red-500 scale-105 animate-pulse' : 'bg-[#1db954] hover:bg-[#1ed760] hover:scale-105'} active:scale-95`}
+                >
+                    <div className="absolute inset-0 rounded-full border-4 border-white/10 group-hover:border-white/20 transition-colors"></div>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-2 drop-shadow-lg" fill="currentColor" viewBox="0 0 24 24">
+                        {isRecording ? (<rect x="6" y="6" width="12" height="12" rx="2"/>) : (<><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></>)}
                     </svg>
-                    <span className="font-semibold text-lg">
-                        {isRecording ? "Stop" : "Record"}
+                    <span className="font-black text-xl tracking-tight uppercase">
+                        {isRecording ? "Analyze" : "Record"}
                     </span>
                 </button>
             </div>
             
-             {isRecording ? (<div className="text-xl font-mono text-slate-300 mb-8">
+             {isRecording ? (<div className="text-3xl font-black text-[#1db954] tracking-widest animate-bounce">
                     0:{recordingTime.toString().padStart(2, '0')}
-                </div>) : (<button onClick={onClose} className="px-6 py-3 border border-slate-600 text-base font-medium rounded-full text-slate-300 bg-slate-800 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-slate-500">
-                    Skip
+                </div>) : (<button onClick={onClose} className="text-[#a7a7a7] hover:text-white font-bold tracking-widest uppercase text-sm transition-all hover:scale-110">
+                    Cancel
                 </button>)}
         </div>);
 };

@@ -197,12 +197,12 @@ export const generatePlaylist = async (emotion) => {
 Return ONLY a valid JSON object with this exact structure:
 {
     "songs": [
-        {"title": "Song Title", "artist": "Artist Name"},
-        {"title": "Another Song", "artist": "Another Artist"}
+        {"title": "Song Title", "artist": "Artist Name", "youtubeId": "XXXXXXXXXXX"},
+        {"title": "Another Song", "artist": "Another Artist", "youtubeId": "YYYYYYYYYYY"}
     ]
 }
 
-Do not include any conversational text. Respond with JSON only.`;
+Do not include any conversational text. Respond with JSON only. Ensure the youtubeId is accurate for full song playback.`;
 
         const response = await withRetry(
             async () => {

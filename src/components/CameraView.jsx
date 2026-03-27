@@ -99,40 +99,55 @@ const CameraView = ({ onCapture, onClose, onError }) => {
     }, [onCapture, onError, cameras, currentCameraIndex]);
     const hasZoom = cameraCapabilities?.zoom && cameraCapabilities.zoom.max > cameraCapabilities.zoom.min;
     const canSwitchCamera = cameras.length > 1;
-    return (<div className="w-full max-w-2xl mx-auto flex flex-col items-center">
-            <div className="relative w-full aspect-video rounded-lg overflow-hidden border-2 border-slate-700 bg-black mb-6">
+    return (
+        <div className="w-full max-w-2xl mx-auto flex flex-col items-center p-8 rounded-3xl bg-[#181818] shadow-2xl border border-white/5 animate-in slide-in-from-bottom-8 duration-500">
+            <h2 className="text-3xl font-black text-white mb-6 uppercase tracking-tighter">Capture Emotion</h2>
+            
+            <div className="relative w-full aspect-video rounded-2xl overflow-hidden border-4 border-white/5 bg-black mb-8 group">
                 <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" style={{ transform: cameras[currentCameraIndex]?.facing === 'user' ? 'scaleX(-1)' : 'scaleX(1)' }}/>
                 <canvas ref={canvasRef} className="hidden"/>
 
-                 {(hasZoom || canSwitchCamera) && (<div className="absolute bottom-0 left-0 right-0 p-4 bg-black/40 backdrop-blur-sm flex items-center justify-center space-x-6">
-                        {hasZoom && (<div className="flex items-center gap-3 w-full max-w-xs text-white" title="Zoom control">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7"/>
-                                </svg>
-                                <input type="range" min={cameraCapabilities.zoom.min} max={cameraCapabilities.zoom.max} step={cameraCapabilities.zoom.step || 1} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-blue-500" aria-label="Zoom slider"/>
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3h-6"/>
-                                </svg>
-                            </div>)}
-                        {canSwitchCamera && (<button onClick={handleSwitchCamera} aria-label="Switch Camera" title="Switch Camera" className="p-3 rounded-full bg-slate-700/50 hover:bg-slate-600/70 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-blue-500">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5m-1.5-1.5l-4-4m0 0l-4 4m4-4V19"/>
-                                </svg>
-                            </button>)}
-                    </div>)}
+                 {(hasZoom || canSwitchCamera) && (
+                    <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity">
+                        {hasZoom && (
+                            <div className="flex items-center gap-3 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full text-white w-full max-w-[180px]">
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7"/></svg>
+                                <input type="range" min={cameraCapabilities.zoom.min} max={cameraCapabilities.zoom.max} step={cameraCapabilities.zoom.step || 1} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="w-full h-1 bg-white/20 rounded-full appearance-none cursor-pointer accent-white"/>
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3h-6"/></svg>
+                            </div>
+                        )}
+                        {canSwitchCamera && (
+                            <button onClick={handleSwitchCamera} className="p-3 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all">
+                                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5m-1.5-1.5l-4-4m0 0l-4 4m4-4V19"/></svg>
+                            </button>
+                        )}
+                    </div>
+                )}
+                
+                {/* Visual Frame */}
+                <div className="absolute inset-0 border-[20px] border-black/20 pointer-events-none"></div>
+                <div className="absolute top-4 left-4 w-8 h-8 border-t-4 border-l-4 border-white/40 rounded-tl-lg pointer-events-none"></div>
+                <div className="absolute top-4 right-4 w-8 h-8 border-t-4 border-r-4 border-white/40 rounded-tr-lg pointer-events-none"></div>
+                <div className="absolute bottom-4 left-4 w-8 h-8 border-b-4 border-l-4 border-white/40 rounded-bl-lg pointer-events-none"></div>
+                <div className="absolute bottom-4 right-4 w-8 h-8 border-b-4 border-r-4 border-white/40 rounded-br-lg pointer-events-none"></div>
             </div>
-            <div className="flex items-center space-x-4">
-                <button onClick={onClose} className="px-6 py-3 border border-slate-600 text-base font-medium rounded-full text-slate-300 bg-slate-800 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-slate-500">
+
+            <div className="flex items-center space-x-6">
+                <button onClick={onClose} className="text-[#a7a7a7] hover:text-white font-bold uppercase tracking-widest text-sm transition-all hover:scale-110">
                     Cancel
                 </button>
-                <button onClick={handleCapture} className="group inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-full text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-blue-500">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <button 
+                    onClick={handleCapture} 
+                    className="group bg-[#1db954] hover:bg-[#1ed760] text-black font-black px-10 py-4 rounded-full flex items-center shadow-2xl transition-all hover:scale-105 active:scale-95 uppercase tracking-tighter text-lg"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
                     </svg>
-                    Capture Emotion
+                    Capture
                 </button>
             </div>
-        </div>);
+        </div>
+    );
 };
 export default CameraView;
