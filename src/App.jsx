@@ -108,20 +108,29 @@ const App = () => {
     }, []);
 
     const openSaveModal = () => {
-        if (playlist.length === 0) return;
+        if (playlist.length === 0) {
+            setError(null);
+            navigateTo('home');
+            return;
+        }
         setNewPlaylistName(`${currentEmotion?.name || 'My'} Vibe Collection`);
         setIsCreateModalOpen(true);
     };
 
     const handleSavePlaylist = () => {
+        if (!newPlaylistName.trim()) {
+            alert("Please enter a collection name.");
+            return;
+        }
         const pl = {
             id: Date.now(),
-            name: newPlaylistName || `${currentEmotion?.name || 'My'} Vibe`,
+            name: newPlaylistName.trim(),
             songs: [...playlist],
-            emotion: {...currentEmotion}
+            emotion: currentEmotion ? {...currentEmotion} : null
         };
         setUserPlaylists(prev => [pl, ...prev]);
         setIsCreateModalOpen(false);
+        setNewPlaylistName('');
         navigateTo('library');
     };
 
@@ -176,7 +185,7 @@ const App = () => {
             case 'profile': return <ProfileView currentVibe={currentEmotion?.name || 'Joy'} onBack={goBack} />;
             case 'camera': return <CameraView onCapture={handleCapture} onClose={goBack} onError={setError}/>;
             case 'mic': return <AudioView onCapture={handleAudioCapture} onClose={goBack} onError={setError}/>;
-            case 'playlist': return <PlaylistDisplay playlist={playlist} emotion={currentEmotion} onReset={handleReset}/>;
+            case 'playlist': return <PlaylistDisplay playlist={playlist} emotion={currentEmotion} onReset={handleReset} onSave={openSaveModal}/>;
             case 'library': return <LibraryView playlists={userPlaylists} onSelectPlaylist={handleSelectSavedPlaylist} />;
             default: return <EmotionSelector emotions={EMOTIONS} onSelect={handleEmotionSelect} onOpenCamera={() => navigateTo('camera')} onOpenMic={() => navigateTo('mic')} isOffline={isOffline}/>;
         }
@@ -226,10 +235,10 @@ const App = () => {
             </div>
 
             {/* Main Area */}
-            <div className="flex-1 flex flex-col relative overflow-hidden shadow-[inset_0_0_100px_rgba(0,0,0,0.5)]">
-                {/* Header (Center Search) */}
-                <header className="h-24 px-10 flex items-center justify-between absolute top-0 left-0 right-0 z-50 pointer-events-none">
-                    <div className="flex items-center space-x-4 pointer-events-auto">
+            <div className="flex-1 flex flex-col relative overflow-hidden h-full">
+                {/* Header (Sticky Search Area) */}
+                <header className="h-24 px-10 flex items-center justify-between z-50 bg-[#0a0a12]/80 backdrop-blur-3xl border-b border-white/5 sticky top-0 left-0 right-0">
+                    <div className="flex items-center space-x-4">
                         <button onClick={goBack} disabled={historyIndex === 0} className="w-10 h-10 rounded-full bg-black/60 backdrop-blur-xl flex items-center justify-center text-white/40 hover:text-white transition-all border border-white/10 disabled:opacity-30 disabled:cursor-not-allowed">
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3"><path d="M15 19l-7-7 7-7"/></svg>
                         </button>
@@ -239,7 +248,7 @@ const App = () => {
                     </div>
 
                     {/* Centered Large Search Bar */}
-                    <div className="flex justify-center flex-1 max-w-2xl px-8 pointer-events-auto">
+                    <div className="flex justify-center flex-1 max-w-2xl px-8">
                         <div className={`relative flex items-center transition-all duration-700 ${isSearchActive ? 'w-full' : 'w-14'}`}>
                             <button 
                                 onClick={() => setIsSearchActive(!isSearchActive)}
@@ -257,18 +266,23 @@ const App = () => {
                         </div>
                     </div>
 
-                    <div className="flex items-center space-x-6 pointer-events-auto">
-                        <button className="flex items-center space-x-4 bg-black/60 backdrop-blur-xl py-2 px-5 rounded-full border border-white/10 group active:scale-95 transition-all" onClick={() => navigateTo('profile')}>
+                    <div className="flex items-center space-x-6">
+                        <button className="flex items-center space-x-4 bg-black/60 backdrop-blur-xl py-2 px-5 rounded-full border border-white/10 group active:scale-95 transition-all text-left" onClick={() => navigateTo('profile')}>
                             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-violet-600 to-cyan-400 p-0.5">
-                                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=Rishit%20Ranjan`} className="w-full h-full rounded-full bg-black" alt="" />
+                                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=Rishit%20Ranjan`} className="w-full h-full rounded-full bg-black shadow-inner" alt="" />
                             </div>
-                            <span className="text-[10px] font-black uppercase tracking-widest text-white/70 group-hover:text-white transition-colors">Rishit Ranjan</span>
+                            <div className="hidden lg:block">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-white/70 group-hover:text-white transition-colors block leading-none">Rishit Ranjan</span>
+                                <span className="text-[8px] font-bold text-cyan-400/50 uppercase tracking-[0.2em] leading-none">Pro Member</span>
+                            </div>
                         </button>
                     </div>
                 </header>
 
-                <main className="flex-1 w-full bg-[#0a0a12] flex flex-col pt-0 relative z-10 transition-all duration-500 overflow-hidden">
-                    {renderContent()}
+                <main className="flex-1 w-full bg-[#0a0a12] flex flex-col relative overflow-y-auto scrollbar-hide z-10 transition-all duration-500">
+                    <div className="flex-1 flex flex-col min-h-full">
+                        {renderContent()}
+                    </div>
                 </main>
             </div>
 
