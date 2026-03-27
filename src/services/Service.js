@@ -1,4 +1,5 @@
-const FOUNDRY_BASE_URL = '/api/foundry';
+const IS_PRODUCTION = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+const FOUNDRY_BASE_URL = IS_PRODUCTION ? 'http://127.0.0.1:11434' : '/api/foundry';
 const MODEL_NAME = 'llava:latest';
 
 const LLVM_CONFIG = {
@@ -191,6 +192,8 @@ const tryRequestFormats = async (prompt, options = {}) => {
                 headers: {
                     'Content-Type': 'application/json'
                 },
+                mode: IS_PRODUCTION ? 'cors' : 'same-origin',
+                credentials: 'omit',
                 body: JSON.stringify(format.body)
             });
             
