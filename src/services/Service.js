@@ -1,14 +1,34 @@
-// BUILD VERSION: 1.0.1-FORCE-DEPLOY
-const IS_PRODUCTION = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-const FOUNDRY_BASE_URL = IS_PRODUCTION ? 'http://127.0.0.1:11434' : '/api/foundry';
-const MODEL_NAME = 'llava:latest';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const LLVM_CONFIG = {
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
+
+// Lazy initialization of Gemini
+let genAI = null;
+let model = null;
+
+const getModel = () => {
+    const rawKey = import.meta.env.VITE_GEMINI_API_KEY;
+    console.log(`🔑 Key check: ${rawKey ? "Found (Starts with " + rawKey.substring(0, 4) + ")" : "Missing"}`);
+
+    if (!rawKey || typeof rawKey !== 'string' || rawKey.length < 5) return null;
+
+    if (!model) {
+        try {
+            genAI = new GoogleGenerativeAI(rawKey);
+            model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        } catch (error) {
+            console.error("Failed to initialize Gemini:", error.message);
+            return null;
+        }
+    }
+    return model;
+};
+
+const CONFIG = {
     temperature: 0.7,
-    maxTokens: 600,
-    retryAttempts: 2, 
+    maxOutputTokens: 1000,
+    retryAttempts: 2,
     retryDelay: 1000,
-    timeout: 30000
 };
 
 // Response cache
@@ -22,12 +42,12 @@ class ResponseCache {
     get(key) {
         const item = this.cache.get(key);
         if (!item) return null;
-        
+
         if (Date.now() - item.timestamp > this.ttl) {
             this.cache.delete(key);
             return null;
         }
-        
+
         return item.value;
     }
 
@@ -36,7 +56,7 @@ class ResponseCache {
             const oldestKey = this.cache.keys().next().value;
             this.cache.delete(oldestKey);
         }
-        
+
         this.cache.set(key, {
             value,
             timestamp: Date.now()
@@ -46,252 +66,31 @@ class ResponseCache {
 
 const emotionCache = new ResponseCache();
 
-// Check online status (Note: offline status might not block LOCAL Foundry, but we keep it for consistency)
-const checkOnlineStatus = async () => {
-    // If it's a local address, we don't strictly need "online" (internet), 
-    // but the app uses it to show errors. We'll allow local calls even if offline.
-    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    if (!navigator.onLine && !isLocal) {
-        throw new Error("You are currently offline. An internet connection is required.");
-    }
-};
-
-// Try multiple request formats
-const tryRequestFormats = async (prompt, options = {}) => {
-    const targetModel = options.model || MODEL_NAME;
-    
-    const formats = [
-        // Format 1: OpenAI chat format with system message
-        {
-            name: "OpenAI Chat with System",
-            body: {
-                model: targetModel,
-                messages: [
-                    { role: "system", content: "You are a music recommendation assistant. Respond with valid JSON only." },
-                    { role: "user", content: prompt }
-                ],
-                temperature: options.temperature || LLVM_CONFIG.temperature,
-                max_tokens: options.max_tokens || LLVM_CONFIG.maxTokens
-            }
-        },
-        // Format 2: OpenAI chat format without system
-        {
-            name: "OpenAI Chat without System",
-            body: {
-                model: targetModel,
-                messages: [{ role: "user", content: prompt }],
-                temperature: options.temperature || LLVM_CONFIG.temperature,
-                max_tokens: options.max_tokens || LLVM_CONFIG.maxTokens
-            }
-        },
-        // Format 3: Simple prompt (Legacy Completion)
-        {
-            name: "Simple Prompt",
-            body: {
-                model: targetModel,
-                prompt: prompt,
-                max_tokens: options.max_tokens || PHI_CONFIG.maxTokens,
-                temperature: options.temperature || PHI_CONFIG.temperature
-            }
-        },
-        // Format 4: Input field (Some older local tools)
-        {
-            name: "Input Field",
-            body: {
-                input: prompt,
-                max_tokens: options.max_tokens || PHI_CONFIG.maxTokens,
-                temperature: options.temperature || PHI_CONFIG.temperature
-            }
-        },
-        // Format 5: Ollama Native Chat
-        {
-            name: "Ollama Native Chat",
-            path: "/api/chat",
-            body: {
-                model: targetModel,
-                messages: [{ role: "user", content: prompt }],
-                stream: false,
-                options: {
-                    temperature: options.temperature || PHI_CONFIG.temperature,
-                    num_predict: options.max_tokens || PHI_CONFIG.maxTokens
-                }
-            }
-        },
-        // Format 6: Ollama Native Generate
-        {
-            name: "Ollama Native Generate",
-            path: "/api/generate",
-            body: {
-                model: targetModel,
-                prompt: prompt,
-                stream: false,
-                options: {
-                    temperature: options.temperature || PHI_CONFIG.temperature,
-                    num_predict: options.max_tokens || PHI_CONFIG.maxTokens
-                }
-            }
-        }
-    ];
-
-    // Only add Vision formats if we have an image to analyze
-    if (options.imageData) {
-        // Splice vision formats to the START of the list
-        formats.unshift(
-            // Format: Ollama Native Vision
-            {
-                name: "Ollama Native Vision",
-                path: "/api/chat",
-                body: {
-                    model: MODEL_NAME,
-                    messages: [{
-                        role: "user",
-                        content: options.promptText || prompt,
-                        images: [options.imageData]
-                    }],
-                    stream: false
-                }
-            },
-            // Format: OpenAI Vision
-            {
-                name: "Vision Chat Format",
-                body: {
-                    model: MODEL_NAME,
-                    messages: [
-                        {
-                            role: "user",
-                            content: [
-                                { type: "text", text: options.promptText || prompt },
-                                { type: "image_url", image_url: { url: `data:image/jpeg;base64,${options.imageData}` } }
-                            ]
-                        }
-                    ],
-                    max_tokens: options.max_tokens || LLVM_CONFIG.maxTokens,
-                    temperature: options.temperature || LLVM_CONFIG.temperature
-                }
-            }
-        );
-    }
-
-    for (const format of formats) {
-        try {
-            console.log(`📝 Trying format: ${format.name}`);
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), options.timeout || LLVM_CONFIG.timeout);
-
-            const isChatFormat = Array.isArray(format.body.messages);
-            let endpoint;
-            
-            if (format.path) {
-                endpoint = `${FOUNDRY_BASE_URL}${format.path}`;
-            } else {
-                endpoint = isChatFormat ? `${FOUNDRY_BASE_URL}/v1/chat/completions` : `${FOUNDRY_BASE_URL}/v1/completions`;
-            }
-            
-            const response = await fetch(endpoint, {
-                signal: controller.signal,
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                mode: IS_PRODUCTION ? 'cors' : 'same-origin',
-                credentials: 'omit',
-                body: JSON.stringify(format.body)
-            });
-            
-            clearTimeout(timeoutId);
-            const responseText = await response.text();
-            
-            if (response.ok) {
-                console.log(`✅ Format "${format.name}" succeeded!`);
-                try {
-                    // Try parsing as-is
-                    const data = JSON.parse(responseText);
-                    return { success: true, data, format: format.name };
-                } catch {
-                    // If parsing fails, pass the raw text to be cleaned later
-                    return { success: true, text: responseText, format: format.name };
-                }
-            } else {
-                console.log(`❌ Format "${format.name}" failed with status ${response.status}: ${responseText.substring(0, 250)}`);
-            }
-        } catch (error) {
-            if (error.name === 'AbortError') console.log(`❌ Format "${format.name}" timed out`);
-            console.log(`❌ Format "${format.name}" error:`, error.message);
-        }
-    }
-    
-    return { success: false, error: "All formats failed" };
-};
-
-// Call Foundry API with format detection
-export const callFoundryPhi = async (prompt, options = {}) => {
-    console.log(`📡 Calling Foundry for prompt: ${prompt.substring(0, 100)}...`);
-    
-    const result = await tryRequestFormats(prompt, options);
-    
-    if (!result.success) {
-        throw new Error(result.error || "All request formats failed. Ensure the local Foundry server is running and the model name matches.");
-    }
-    
-    // Parse the response
-    let text = '';
-    if (result.data) {
-        if (result.data.choices && result.data.choices[0] && result.data.choices[0].message) {
-            text = result.data.choices[0].message.content;
-        } else if (result.data.choices && result.data.choices[0] && result.data.choices[0].text) {
-            text = result.data.choices[0].text;
-        } else if (result.data.response) {
-            text = result.data.response;
-        } else if (result.data.text) {
-            text = result.data.text;
-        } else {
-            text = JSON.stringify(result.data);
-        }
-    } else if (result.text) {
-        text = result.text;
-    }
-    
-    console.log(`📝 Response (${result.format}): ${text.substring(0, 200)}`);
-    
-    return {
-        text: text,
-        format: result.format,
-        raw: result.data || result.text
-    };
-};
-
 // Clean JSON string
 const cleanJsonString = (responseText) => {
     let jsonText = responseText.trim();
-    
+
     // Remove markdown code blocks
     const jsonMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
     if (jsonMatch) {
         jsonText = jsonMatch[1].trim();
     }
-    
-    // Aggressive cleaning for common LLM errors (like unescaped quotes in middle of values)
-    // 1. Fix cases like "title": "Song" (Annotation) -> "title": "Song (Annotation)"
-    jsonText = jsonText.replace(/"([^"]+)":\s*"([^"]+)"\s*\(([^)]+)\)/g, '"$1": "$2 ($3)"');
-    
-    // 2. Fix trailing commas
+
+    // Fix trailing commas
     jsonText = jsonText.replace(/,\s*}/g, '}').replace(/,\s*\]/g, ']');
-    
-    // 3. Fix potential typos in keys like "titlelaus" -> "title"
-    jsonText = jsonText.replace(/"title[a-z]*":/gi, '"title":');
-    
+
     return jsonText;
 };
 
 // Retry wrapper
-const withRetry = async (fn, context, retries = LLVM_CONFIG.retryAttempts) => {
+const withRetry = async (fn, context, retries = CONFIG.retryAttempts) => {
     for (let i = 0; i <= retries; i++) {
         try {
             return await fn();
         } catch (error) {
             if (i === retries) throw error;
             console.warn(`Retry ${i + 1}/${retries} for ${context}:`, error.message);
-            await new Promise(resolve => setTimeout(resolve, LLVM_CONFIG.retryDelay * (i + 1)));
+            await new Promise(resolve => setTimeout(resolve, CONFIG.retryDelay * (i + 1)));
         }
     }
 };
@@ -386,14 +185,14 @@ const FALLBACK_PLAYLISTS = {
 
 // Main exported function: generatePlaylist
 export const generatePlaylist = async (emotion) => {
-    await checkOnlineStatus();
-    
-    // We remove the cache check here to ensure fresh results every click as requested
-    // const cachedPlaylist = ... 
-    
+    const model = getModel();
+    if (!model) {
+        console.warn("⚠️ Gemini API Key missing or initialization failed. Using fallback playlists.");
+        return getFallback(emotion);
+    }
+
     try {
         const prompt = `Generate a fresh, unique, and diverse playlist of 10 songs that perfectly capture the feeling of '${emotion}'. 
-        IMPORTANT: Try to include different artists and styles than typical entries.
 
 Return ONLY a valid JSON object with this exact structure:
 {
@@ -403,26 +202,26 @@ Return ONLY a valid JSON object with this exact structure:
     ]
 }
 
-Ensure the output contains only the JSON. Do not include any conversational text or explanation.`;
-        
+Do not include any conversational text. Respond with JSON only.`;
+
         const response = await withRetry(
-            () => callFoundryPhi(prompt, {
-                temperature: 0.7,
-                max_tokens: 600
-            }),
+            async () => {
+                const result = await model.generateContent(prompt);
+                return result.response.text();
+            },
             `playlist generation for ${emotion}`
         );
-        
-        const jsonText = cleanJsonString(response.text);
+
+        const jsonText = cleanJsonString(response);
         let parsed;
-        
+
         try {
             parsed = JSON.parse(jsonText);
         } catch (parseError) {
             console.error("Failed to parse playlist JSON:", jsonText, parseError);
-            throw new Error("The AI returned a response in an unexpected format.");
+            throw new Error("Invalid Gemini response format.");
         }
-        
+
         if (parsed && Array.isArray(parsed.songs)) {
             return parsed.songs;
         } else if (Array.isArray(parsed)) {
@@ -431,61 +230,64 @@ Ensure the output contains only the JSON. Do not include any conversational text
             throw new Error("The AI returned a playlist, but its structure was not what we expected.");
         }
     } catch (error) {
-        console.warn(`⚠️ Foundry failed. Using fallback for emotion: ${emotion}.`, error.message);
-        
-        let fallbackKey = emotion;
-        if (!FALLBACK_PLAYLISTS[fallbackKey]) {
-            if (emotion.includes('Joy')) fallbackKey = 'Joy';
-            else if (emotion.includes('Sad')) fallbackKey = 'Sadness';
-            else if (emotion.includes('Anger')) fallbackKey = 'Anger';
-            else fallbackKey = 'default';
-        }
-        
-        return FALLBACK_PLAYLISTS[fallbackKey];
+        console.warn(`⚠️ Gemini failed. Using fallback for emotion: ${emotion}.`, error.message);
+        return getFallback(emotion);
     }
 };
 
-// Emotion detection using multimodal Vision local LLM
+const getFallback = (emotion) => {
+    let fallbackKey = emotion;
+    if (!FALLBACK_PLAYLISTS[fallbackKey]) {
+        if (emotion.includes('Joy')) fallbackKey = 'Joy';
+        else if (emotion.includes('Sad')) fallbackKey = 'Sadness';
+        else if (emotion.includes('Anger')) fallbackKey = 'Anger';
+        else fallbackKey = 'default';
+    }
+    return FALLBACK_PLAYLISTS[fallbackKey];
+};
+
+// Emotion detection using Gemini 1.5 Flash Vision
 export const detectEmotionFromImage = async (base64ImageData) => {
-    console.log("📸 Vision-based Emotion Recognition via local LLM");
-    
-    // Check cache
-    const cacheKey = `image_${base64ImageData.substring(0, 100)}`;
-    const cached = emotionCache.get(cacheKey);
-    if (cached) return cached;
+    console.log("📸 Vision-based Emotion Recognition via Gemini 1.5 Flash");
+    const model = getModel();
+    if (!model) return "Joy";
 
     try {
-        const promptText = "Identify the primary facial emotion of the person in this image. Respond ONLY with one of these words: Joy, Sadness, Anger, Excitement, Melancholy, Peaceful, Joy-Anger, Joy-Surprise, Joy-Excitement, Sad-Anger.";
-        
-        // Pass model override for vision task
-        // Identify task model
-        const response = await callFoundryPhi(promptText, { 
-            imageData: base64ImageData,
-            model: MODEL_NAME,
-            max_tokens: 15,
-            temperature: 0.1 // Lower for objective recognition tasks
-        });
-        
-        let text = response.text.trim().toLowerCase().replace(/[^a-z-]/g, '');
+        const prompt = "Identify the primary facial emotion of the person in this image. Respond ONLY with one of these words: Joy, Sadness, Anger, Excitement, Melancholy, Peaceful, Joy-Anger, Joy-Surprise, Joy-Excitement, Sad-Anger.";
+
+        // Strip data URL prefix if present
+        const cleanBase64 = base64ImageData.includes(',') ? base64ImageData.split(',')[1] : base64ImageData;
+
+        const result = await model.generateContent([
+            {
+                inlineData: {
+                    data: cleanBase64,
+                    mimeType: "image/jpeg"
+                }
+            },
+            prompt
+        ]);
+
+        const response = await result.response;
+        let text = response.text().trim().toLowerCase().replace(/[^a-z-]/g, '');
         const moods = ['joy-anger', 'joy-surprise', 'joy-excitement', 'sad-anger', 'joy', 'sadness', 'anger', 'excitement', 'melancholy', 'peaceful'];
-        
+
         const matchedMood = moods.find(m => text.includes(m));
         if (matchedMood) {
-            const finalMood = matchedMood.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('-');
-            emotionCache.set(cacheKey, finalMood);
-            return finalMood;
+            return matchedMood.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('-');
         }
 
         return 'Joy';
     } catch (error) {
-        console.warn("⚠️ Vision analysis failed (may need multimodal model like Llava), falling back to Joy:", error.message);
+        console.warn("⚠️ Vision analysis failed. Falling back to Joy:", error.message);
         return 'Joy';
     }
 };
 
 export const detectEmotionFromAudio = async (base64AudioData, mimeType, aerFeatures) => {
     console.log("🎤 Audio Emotion Recognition (AER) via wave features:", aerFeatures);
-    
+    const model = getModel();
+    if (!model) return "Joy";
     if (!aerFeatures) return 'Joy';
 
     try {
@@ -494,31 +296,19 @@ export const detectEmotionFromAudio = async (base64AudioData, mimeType, aerFeatu
 - Average Peak Frequency (Pitch): ${aerFeatures.avgFreq.toFixed(2)} Hz
 - Vocal Stability (Variance): ${aerFeatures.stability.toFixed(2)}
 
-Based on these MIR (Music Information Retrieval) patterns, identify the user's emotion. Respond ONLY with one of these words: Joy, Sadness, Anger, Excitement, Melancholy, Peaceful, Joy-Anger, Joy-Surprise, Joy-Excitement, Sad-Anger.`;
-        
-        const response = await callFoundryPhi(prompt, { max_tokens: 15 });
-        let text = response.text.trim().toLowerCase();
-        
-        // Clean out common conversational junk
-        text = text.replace(/[^a-z-]/g, '');
+Identify the user's emotion. Respond ONLY with one of these words: Joy, Sadness, Anger, Excitement, Melancholy, Peaceful, Joy-Anger, Joy-Surprise, Joy-Excitement, Sad-Anger.`;
 
-        // Map AI result to our strict categories
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        let text = response.text().trim().toLowerCase().replace(/[^a-z-]/g, '');
+
         const moods = ['joy-anger', 'joy-surprise', 'joy-excitement', 'sad-anger', 'joy', 'sadness', 'anger', 'excitement', 'melancholy', 'peaceful'];
-        
-        // Handle direct matches
         const matchedMood = moods.find(m => text.includes(m));
+
         if (matchedMood) {
-            // Capitalize first letter (Joy, Sadness etc)
             return matchedMood.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('-');
         }
 
-        // Fallback for neutral or unknown
-        if (text.includes('neutral') || text.includes('given')) {
-            console.log("ℹ️ Mapping neutral result to Peaceful");
-            return 'Peaceful';
-        }
-
-        console.log(`✅ AER Result (Mapped): Joy`);
         return 'Joy';
     } catch (error) {
         console.warn("⚠️ AER analysis failed, falling back to Joy:", error.message);
@@ -528,18 +318,19 @@ Based on these MIR (Music Information Retrieval) patterns, identify the user's e
 
 // Health check
 export const checkFoundryHealth = async () => {
+    const model = getModel();
+    if (!model) return { healthy: false, message: "❌ Gemini API Key missing or invalid" };
     try {
-        const result = await tryRequestFormats("test", { max_tokens: 5 });
+        const result = await model.generateContent("hi");
         return {
-            healthy: result.success,
-            format: result.format,
-            message: result.success ? '✅ Foundry service is working' : '❌ No working format found'
+            healthy: !!result.response.text(),
+            message: '✅ Gemini API is working'
         };
     } catch (error) {
         return {
             healthy: false,
             error: error.message,
-            message: '❌ Could not connect to Foundry service'
+            message: '❌ Could not connect to Gemini service'
         };
     }
 };

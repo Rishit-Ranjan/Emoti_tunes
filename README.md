@@ -8,6 +8,9 @@ Note: An internet connection is required to generate the playlist and open the d
 
 1. Install dependencies:
    `npm install`
+   
+2. set up .env.local with your own api key
+
 2. Run the app:
    `npm run dev`
 
