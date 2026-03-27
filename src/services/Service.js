@@ -1,10 +1,7 @@
 const FOUNDRY_BASE_URL = '/api/foundry';
-const OLLAMA_BASE_URL = '/api/ollama';
+const MODEL_NAME = 'llava:latest';
 
-const PLAYLIST_MODEL = 'phi3.5:latest';
-const VISION_MODEL = 'llava:latest';
-
-const PHI_CONFIG = {
+const LLVM_CONFIG = {
     temperature: 0.7,
     maxTokens: 600,
     retryAttempts: 2, 
@@ -59,9 +56,7 @@ const checkOnlineStatus = async () => {
 
 // Try multiple request formats
 const tryRequestFormats = async (prompt, options = {}) => {
-    const isVisionTask = !!options.imageData;
-    const targetBaseUrl = isVisionTask ? OLLAMA_BASE_URL : FOUNDRY_BASE_URL;
-    const targetModel = options.model || (isVisionTask ? VISION_MODEL : PLAYLIST_MODEL);
+    const targetModel = options.model || MODEL_NAME;
     
     const formats = [
         // Format 1: OpenAI chat format with system message
@@ -73,8 +68,8 @@ const tryRequestFormats = async (prompt, options = {}) => {
                     { role: "system", content: "You are a music recommendation assistant. Respond with valid JSON only." },
                     { role: "user", content: prompt }
                 ],
-                temperature: options.temperature || PHI_CONFIG.temperature,
-                max_tokens: options.max_tokens || PHI_CONFIG.maxTokens
+                temperature: options.temperature || LLVM_CONFIG.temperature,
+                max_tokens: options.max_tokens || LLVM_CONFIG.maxTokens
             }
         },
         // Format 2: OpenAI chat format without system
@@ -83,8 +78,8 @@ const tryRequestFormats = async (prompt, options = {}) => {
             body: {
                 model: targetModel,
                 messages: [{ role: "user", content: prompt }],
-                temperature: options.temperature || PHI_CONFIG.temperature,
-                max_tokens: options.max_tokens || PHI_CONFIG.maxTokens
+                temperature: options.temperature || LLVM_CONFIG.temperature,
+                max_tokens: options.max_tokens || LLVM_CONFIG.maxTokens
             }
         },
         // Format 3: Simple prompt (Legacy Completion)
@@ -145,7 +140,7 @@ const tryRequestFormats = async (prompt, options = {}) => {
                 name: "Ollama Native Vision",
                 path: "/api/chat",
                 body: {
-                    model: VISION_MODEL,
+                    model: MODEL_NAME,
                     messages: [{
                         role: "user",
                         content: options.promptText || prompt,
@@ -158,7 +153,7 @@ const tryRequestFormats = async (prompt, options = {}) => {
             {
                 name: "Vision Chat Format",
                 body: {
-                    model: VISION_MODEL,
+                    model: MODEL_NAME,
                     messages: [
                         {
                             role: "user",
@@ -168,8 +163,8 @@ const tryRequestFormats = async (prompt, options = {}) => {
                             ]
                         }
                     ],
-                    max_tokens: options.max_tokens || PHI_CONFIG.maxTokens,
-                    temperature: options.temperature || PHI_CONFIG.temperature
+                    max_tokens: options.max_tokens || LLVM_CONFIG.maxTokens,
+                    temperature: options.temperature || LLVM_CONFIG.temperature
                 }
             }
         );
@@ -179,15 +174,15 @@ const tryRequestFormats = async (prompt, options = {}) => {
         try {
             console.log(`📝 Trying format: ${format.name}`);
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), options.timeout || PHI_CONFIG.timeout);
+            const timeoutId = setTimeout(() => controller.abort(), options.timeout || LLVM_CONFIG.timeout);
 
             const isChatFormat = Array.isArray(format.body.messages);
             let endpoint;
             
             if (format.path) {
-                endpoint = `${targetBaseUrl}${format.path}`;
+                endpoint = `${FOUNDRY_BASE_URL}${format.path}`;
             } else {
-                endpoint = isChatFormat ? `${targetBaseUrl}/v1/chat/completions` : `${targetBaseUrl}/v1/completions`;
+                endpoint = isChatFormat ? `${FOUNDRY_BASE_URL}/v1/chat/completions` : `${FOUNDRY_BASE_URL}/v1/completions`;
             }
             
             const response = await fetch(endpoint, {
@@ -285,14 +280,14 @@ const cleanJsonString = (responseText) => {
 };
 
 // Retry wrapper
-const withRetry = async (fn, context, retries = PHI_CONFIG.retryAttempts) => {
+const withRetry = async (fn, context, retries = LLVM_CONFIG.retryAttempts) => {
     for (let i = 0; i <= retries; i++) {
         try {
             return await fn();
         } catch (error) {
             if (i === retries) throw error;
             console.warn(`Retry ${i + 1}/${retries} for ${context}:`, error.message);
-            await new Promise(resolve => setTimeout(resolve, PHI_CONFIG.retryDelay * (i + 1)));
+            await new Promise(resolve => setTimeout(resolve, LLVM_CONFIG.retryDelay * (i + 1)));
         }
     }
 };
@@ -459,9 +454,10 @@ export const detectEmotionFromImage = async (base64ImageData) => {
         const promptText = "Identify the primary facial emotion of the person in this image. Respond ONLY with one of these words: Joy, Sadness, Anger, Excitement, Melancholy, Peaceful, Joy-Anger, Joy-Surprise, Joy-Excitement, Sad-Anger.";
         
         // Pass model override for vision task
+        // Identify task model
         const response = await callFoundryPhi(promptText, { 
             imageData: base64ImageData,
-            model: VISION_MODEL,
+            model: MODEL_NAME,
             max_tokens: 15,
             temperature: 0.1 // Lower for objective recognition tasks
         });
