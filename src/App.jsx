@@ -24,6 +24,7 @@ const App = () => {
     const [playlist, setPlaylist] = useState([]);
     const [userPlaylists, setUserPlaylists] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [searchResults, setSearchResults] = useState([]);
     const [loadingMessage, setLoadingMessage] = useState('');
     const [error, setError] = useState(null);
     const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -56,7 +57,7 @@ const App = () => {
         setHistory(newHistory);
         setHistoryIndex(newHistory.length - 1);
         setView(newView);
-        setIsSearchActive(false);
+        if (newView !== 'search') setIsSearchActive(false);
     };
 
     const goBack = () => {
@@ -140,6 +141,23 @@ const App = () => {
         navigateTo('playlist');
     };
 
+    const handleSearch = (query) => {
+        setSearchQuery(query);
+        if (query.trim().length > 0) {
+            if (view !== 'search') {
+                navigateTo('search');
+            }
+            const results = EMOTIONS.filter(e => 
+                e.name.toLowerCase().includes(query.toLowerCase()) || 
+                e.description.toLowerCase().includes(query.toLowerCase()) ||
+                (e.recommendations && e.recommendations.some(s => s.toLowerCase().includes(query.toLowerCase())))
+            );
+            setSearchResults(results);
+        } else if (view === 'search') {
+            goBack();
+        }
+    };
+
     const handleCapture = useCallback(async (imageData) => {
         setLoadingMessage('Analyzing mood...');
         setIsLoading(true);
@@ -187,6 +205,59 @@ const App = () => {
             case 'mic': return <AudioView onCapture={handleAudioCapture} onClose={goBack} onError={setError}/>;
             case 'playlist': return <PlaylistDisplay playlist={playlist} emotion={currentEmotion} onReset={handleReset} onSave={openSaveModal}/>;
             case 'library': return <LibraryView playlists={userPlaylists} onSelectPlaylist={handleSelectSavedPlaylist} />;
+            case 'search': return (
+                <div className="flex-1 p-10 bg-[#0a0a12] overflow-y-auto">
+                    <div className="max-w-5xl mx-auto">
+                        <h2 className="text-3xl font-black text-white uppercase tracking-tighter mb-8 italic">
+                            Results for <span className="text-cyan-400">"{searchQuery}"</span>
+                        </h2>
+                        
+                        {searchResults.length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {searchResults.map((emotion) => (
+                                    <div 
+                                        key={emotion.name}
+                                        onClick={() => handleEmotionSelect(emotion)}
+                                        className="bg-[#1a1a2e]/40 border border-white/10 p-8 rounded-[2rem] hover:bg-[#1a1a2e] transition-all cursor-pointer group hover:scale-[1.02] active:scale-95"
+                                    >
+                                        <div className="flex items-center space-x-6">
+                                            <div className={`w-16 h-16 rounded-3xl bg-black/40 flex items-center justify-center shadow-2xl group-hover:rotate-6 transition-transform ${emotion.color}`}>
+                                                <emotion.icon size={32} />
+                                            </div>
+                                            <div className="flex-1">
+                                                <h3 className="text-xl font-black uppercase tracking-tight text-white">{emotion.name}</h3>
+                                                <p className="text-[10px] text-cyan-400/60 font-black uppercase tracking-[0.2em] mt-1 group-hover:text-cyan-400 transition-colors">Start Vibe Session</p>
+                                            </div>
+                                        </div>
+                                        <p className="mt-6 text-xs font-medium text-white/40 leading-relaxed uppercase tracking-wider line-clamp-2">{emotion.description}</p>
+                                        
+                                        {emotion.recommendations && (
+                                            <div className="mt-6 pt-6 border-t border-white/5 space-y-3">
+                                                <div className="flex items-center space-x-2">
+                                                    <svg className="w-3 h-3 text-cyan-400" fill="currentColor" viewBox="0 0 20 20"><path d="M18 3a1 1 0 00-1.196-.98l-10 2A1 1 0 006 5v9.114A4.369 4.369 0 005 14c-1.657 0-3 1.343-3 3s1.343 3 3 3 3-1.343 3-3V7.82l8-1.6V11.114A4.369 4.369 0 0015 11c-1.657 0-3 1.343-3 3s1.343 3 3 3 3-1.343 3-3V3z"/></svg>
+                                                    <span className="text-[9px] font-black text-white/30 uppercase tracking-[0.2em]">Vibe Previews</span>
+                                                </div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {emotion.recommendations.map(song => (
+                                                        <span key={song} className="text-[9px] font-bold px-3 py-1.5 bg-white/5 rounded-xl text-cyan-400/80 border border-white/5 group-hover:bg-white/10 group-hover:text-cyan-400 transition-colors">
+                                                            {song}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center py-32 opacity-20 text-center">
+                                <div className="w-24 h-24 mb-8"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg></div>
+                                <p className="font-black uppercase text-sm tracking-[0.4em]">No matching vibes found</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
             default: return <EmotionSelector emotions={EMOTIONS} onSelect={handleEmotionSelect} onOpenCamera={() => navigateTo('camera')} onOpenMic={() => navigateTo('mic')} isOffline={isOffline}/>;
         }
     };
@@ -196,7 +267,7 @@ const App = () => {
             {isOffline && <OfflineBanner />}
 
             {/* Sidebar */}
-            <div className="w-72 bg-[#050508] border-r border-white/5 flex flex-col pt-10 px-6 z-40">
+            <div className="w-72 bg-[#080b1a] border-r border-white/10 flex flex-col pt-10 px-6 z-40 shadow-2xl transition-colors duration-500">
                 <div className="flex items-center space-x-4 mb-14 px-2 hover:scale-105 transition-transform cursor-pointer group" onClick={() => navigateTo('home')}>
                     <div className="w-12 h-12 bg-gradient-to-br from-violet-600 to-cyan-400 rounded-2xl flex items-center justify-center shadow-[0_10px_30px_rgba(139,92,246,0.3)] group-hover:rotate-12 transition-all">
                         <img src="/logo.png" className="w-7 h-7" alt="" />
@@ -237,22 +308,29 @@ const App = () => {
             {/* Main Area */}
             <div className="flex-1 flex flex-col relative overflow-hidden h-full">
                 {/* Header (Sticky Search Area) */}
-                <header className="h-24 px-10 flex items-center justify-between z-50 bg-[#0a0a12]/80 backdrop-blur-3xl border-b border-white/5 sticky top-0 left-0 right-0">
+                <header className="h-24 px-10 flex items-center justify-between z-50 bg-[#080b1a]/80 backdrop-blur-3xl border-b border-white/10 sticky top-0 left-0 right-0 transition-colors duration-500">
                     <div className="flex items-center space-x-4">
-                        <button onClick={goBack} disabled={historyIndex === 0} className="w-10 h-10 rounded-full bg-black/60 backdrop-blur-xl flex items-center justify-center text-white/40 hover:text-white transition-all border border-white/10 disabled:opacity-30 disabled:cursor-not-allowed">
+                        <button onClick={goBack} disabled={historyIndex === 0} className="w-12 h-12 rounded-2xl bg-[#1a1a2e] flex items-center justify-center text-white/40 hover:text-white hover:scale-110 active:scale-95 transition-all border border-white/10 shadow-xl disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100">
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3"><path d="M15 19l-7-7 7-7"/></svg>
                         </button>
-                        <button onClick={goForward} disabled={historyIndex === history.length - 1} className="w-10 h-10 rounded-full bg-black/60 backdrop-blur-xl flex items-center justify-center text-white/40 hover:text-white transition-all border border-white/10 disabled:opacity-30 disabled:cursor-not-allowed">
+                        <button onClick={goForward} disabled={historyIndex === history.length - 1} className="w-12 h-12 rounded-2xl bg-[#1a1a2e] flex items-center justify-center text-white/40 hover:text-white hover:scale-110 active:scale-95 transition-all border border-white/10 shadow-xl disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100">
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3"><path d="M9 5l7 7-7 7"/></svg>
                         </button>
                     </div>
 
                     {/* Centered Large Search Bar */}
                     <div className="flex justify-center flex-1 max-w-2xl px-8">
-                        <div className={`relative flex items-center transition-all duration-700 ${isSearchActive ? 'w-full' : 'w-14'}`}>
+                        <div className={`relative flex items-center transition-all duration-700 ${isSearchActive ? 'w-full bg-white/5 rounded-2xl border border-white/10 shadow-2xl p-1' : 'w-14'}`}>
                             <button 
-                                onClick={() => setIsSearchActive(!isSearchActive)}
-                                className={`h-14 flex items-center justify-center transition-all rounded-full border border-white/5 shadow-2xl ${isSearchActive ? 'w-14 bg-white/5 border-white/20' : 'w-14 bg-black/80 hover:bg-violet-600 hover:scale-110 active:scale-90 text-white'}`}
+                                onClick={() => {
+                                    const next = !isSearchActive;
+                                    setIsSearchActive(next);
+                                    if (!next) {
+                                        setSearchQuery('');
+                                        if (view === 'search') goBack();
+                                    }
+                                }}
+                                className={`h-14 flex items-center justify-center transition-all ${isSearchActive ? 'w-14 rounded-xl' : 'w-14 rounded-2xl bg-[#1a1a2e] border border-white/10 shadow-xl hover:scale-110 active:scale-95 text-white'}`}
                             >
                                 <svg className={`w-6 h-6 ${isSearchActive ? 'text-cyan-400 rotate-90' : 'text-current'} transition-all`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                             </button>
@@ -260,8 +338,8 @@ const App = () => {
                                 type="text"
                                 placeholder={isSearchActive ? "Explore moods, songs, vibes..." : ""}
                                 value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className={`h-14 pl-14 pr-6 rounded-full bg-white/5 backdrop-blur-3xl text-white outline-none border border-white/10 transition-all duration-700 font-bold uppercase text-[10px] tracking-widest ${isSearchActive ? 'w-full opacity-100' : 'w-0 opacity-0 pointer-events-none'}`}
+                                onChange={(e) => handleSearch(e.target.value)}
+                                className={`h-14 pr-6 bg-transparent text-white outline-none transition-all duration-700 font-bold uppercase text-[10px] tracking-widest ${isSearchActive ? 'w-full opacity-100 pl-4' : 'w-0 opacity-0 pointer-events-none'}`}
                             />
                         </div>
                     </div>
