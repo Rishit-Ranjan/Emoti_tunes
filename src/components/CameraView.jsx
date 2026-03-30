@@ -3,9 +3,21 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 const CameraView = ({ onCapture, onClose, onError }) => {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
+    const faceDetectorRef = useRef(null);
     const [stream, setStream] = useState(null);
     const [isCapturing, setIsCapturing] = useState(false);
     const [countdown, setCountdown] = useState(null);
+    const [isFaceVisible, setIsFaceVisible] = useState(false);
+    const [faceStatus, setFaceStatus] = useState('Position face in center');
+
+    useEffect(() => {
+        if ('FaceDetector' in window) {
+            faceDetectorRef.current = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
+        } else {
+            setFaceStatus('Face detection not supported; capture enabled when camera is active');
+            setIsFaceVisible(true); // fallback
+        }
+    }, []);
 
     const startCamera = useCallback(async () => {
         try {
@@ -31,8 +43,46 @@ const CameraView = ({ onCapture, onClose, onError }) => {
         };
     }, []);
 
+    useEffect(() => {
+        if (!videoRef.current) return;
+
+        const checkFace = async () => {
+            const video = videoRef.current;
+            if (video.readyState < 2 || !canvasRef.current) {
+                return;
+            }
+
+            const canvas = canvasRef.current;
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth || 640;
+            canvas.height = video.videoHeight || 480;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            if (faceDetectorRef.current) {
+                try {
+                    const faces = await faceDetectorRef.current.detect(canvas);
+                    const hasFace = Array.isArray(faces) && faces.length > 0;
+                    setIsFaceVisible(hasFace);
+                    setFaceStatus(hasFace ? 'Face detected - tap CAPTURE' : 'No face detected, align your face');
+                } catch (err) {
+                    console.warn('Face detection error:', err);
+                    setFaceStatus('Face detector error, tap CAPTURE when ready');
+                    setIsFaceVisible(true);
+                }
+            }
+        };
+
+        const interval = setInterval(checkFace, 400);
+        return () => clearInterval(interval);
+    }, [stream]);
+
     const capturePhoto = () => {
         if (isCapturing) return;
+        if (!isFaceVisible) {
+            setFaceStatus('Cannot capture: no face visible');
+            return;
+        }
+
         setIsCapturing(true);
         setCountdown(3);
 
@@ -49,7 +99,10 @@ const CameraView = ({ onCapture, onClose, onError }) => {
     };
 
     const executeCapture = () => {
-        if (!videoRef.current || !canvasRef.current) return;
+        if (!videoRef.current || !canvasRef.current) {
+            setIsCapturing(false);
+            return;
+        }
         const video = videoRef.current;
         const canvas = canvasRef.current;
         const context = canvas.getContext('2d');
@@ -60,6 +113,8 @@ const CameraView = ({ onCapture, onClose, onError }) => {
         
         const imageData = canvas.toDataURL('image/jpeg', 0.8);
         onCapture(imageData);
+        setIsCapturing(false);
+        setFaceStatus('Captured! Generating mood');
     };
 
     return (
@@ -100,10 +155,23 @@ const CameraView = ({ onCapture, onClose, onError }) => {
 
                         <div className="flex justify-center">
                             <div className="bg-black/60 backdrop-blur-2xl px-6 py-3 rounded-2xl border border-violet-500/30 text-white flex items-center space-x-4">
-                                <div className="w-3 h-3 bg-cyan-400 rounded-full animate-ping"></div>
-                                <span className="text-xs font-black uppercase tracking-[0.2em] text-cyan-400">Position face in center</span>
+                                <div className={`w-3 h-3 rounded-full ${isFaceVisible ? 'bg-emerald-400 animate-pulse' : 'bg-red-400 animate-pulse'}`}></div>
+                                <span className="text-xs font-black uppercase tracking-[0.2em] text-cyan-400">
+                                    {faceStatus}
+                                </span>
                             </div>
                         </div>
+
+                        {isFaceVisible && !isCapturing && !countdown && (
+                            <div className="absolute bottom-24 left-0 right-0 flex justify-center pointer-events-auto">
+                                <button
+                                    onClick={capturePhoto}
+                                    className="uppercase text-xs tracking-widest px-6 py-3 rounded-full bg-violet-600 hover:bg-violet-500 border border-white/30 text-white font-black shadow-[0_0_30px_rgba(139,92,246,0.35)] transition-all"
+                                >
+                                    Capture Photo
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -113,7 +181,7 @@ const CameraView = ({ onCapture, onClose, onError }) => {
                     
                     <button 
                         onClick={capturePhoto}
-                        disabled={isCapturing}
+                        disabled={isCapturing || !isFaceVisible}
                         className="w-20 h-20 rounded-full bg-white p-1 hover:scale-110 active:scale-95 transition-all shadow-[0_0_30px_rgba(255,255,255,0.3)] disabled:opacity-50 disabled:scale-100 group/shutter"
                     >
                         <div className="w-full h-full rounded-full border-4 border-black group-hover/shutter:border-violet-600 transition-colors flex items-center justify-center">
