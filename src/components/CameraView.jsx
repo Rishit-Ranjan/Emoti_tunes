@@ -1,9 +1,11 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 
 const CameraView = ({ onCapture, onClose, onError }) => {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const faceDetectorRef = useRef(null);
+    const streamRef = useRef(null);
     const [stream, setStream] = useState(null);
     const [isCapturing, setIsCapturing] = useState(false);
     const [countdown, setCountdown] = useState(null);
@@ -19,12 +21,26 @@ const CameraView = ({ onCapture, onClose, onError }) => {
         }
     }, []);
 
+    const stopCamera = useCallback(() => {
+        const activeStream = streamRef.current;
+        if (activeStream) {
+            activeStream.getTracks().forEach(track => track.stop());
+            if (videoRef.current) {
+                videoRef.current.pause();
+                videoRef.current.srcObject = null;
+            }
+            streamRef.current = null;
+            setStream(null);
+        }
+    }, []);
+
     const startCamera = useCallback(async () => {
         try {
             const s = await navigator.mediaDevices.getUserMedia({ 
                 video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } } 
             });
             setStream(s);
+            streamRef.current = s;
             if (videoRef.current) {
                 videoRef.current.srcObject = s;
             }
@@ -34,14 +50,17 @@ const CameraView = ({ onCapture, onClose, onError }) => {
         }
     }, [onError]);
 
+    const closeCamera = useCallback(() => {
+        stopCamera();
+        onClose();
+    }, [onClose, stopCamera]);
+
     useEffect(() => {
         startCamera();
         return () => {
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-            }
+            stopCamera();
         };
-    }, []);
+    }, [startCamera, stopCamera]);
 
     useEffect(() => {
         if (!videoRef.current) return;
@@ -117,11 +136,11 @@ const CameraView = ({ onCapture, onClose, onError }) => {
         setFaceStatus('Captured! Generating mood');
     };
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8 animate-in fade-in zoom-in-95 duration-500 overflow-hidden">
-            <div className="absolute inset-0 bg-[#0a0a12]/95 backdrop-blur-3xl" onClick={onClose}></div>
+    const cameraContent = (
+        <div className="fixed top-0 bottom-0 left-72 right-0 z-40 flex items-center justify-center p-4 md:p-8 animate-in fade-in zoom-in-95 duration-500 overflow-hidden">
+            <div className="absolute inset-0 bg-[#0a0a12]/95 backdrop-blur-3xl" onClick={closeCamera}></div>
             
-            <div className="relative w-full max-w-4xl aspect-video bg-[#12121e] rounded-[2.5rem] overflow-hidden shadow-[0_0_100px_rgba(139,92,246,0.3)] border border-violet-500/20 flex flex-col group">
+            <div className="relative w-full max-w-6xl aspect-video bg-[#12121e] rounded-[2.5rem] overflow-hidden shadow-[0_0_100px_rgba(139,92,246,0.3)] border border-violet-500/20 flex flex-col group">
                 {/* Video Feed */}
                 <div className="relative flex-1 bg-black">
                     <video 
@@ -140,7 +159,7 @@ const CameraView = ({ onCapture, onClose, onError }) => {
                                 <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white">Live Emotion Feed</span>
                             </div>
                             <button 
-                                onClick={onClose}
+                                onClick={closeCamera}
                                 className="w-12 h-12 rounded-2xl bg-black/40 hover:bg-red-500/20 text-white backdrop-blur-xl transition-all border border-white/10 pointer-events-auto flex items-center justify-center group/btn"
                             >
                                 <svg className="w-6 h-6 group-hover/btn:rotate-90 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -153,12 +172,10 @@ const CameraView = ({ onCapture, onClose, onError }) => {
                             </div>
                         )}
 
-                        <div className="flex justify-center">
-                            <div className="bg-black/60 backdrop-blur-2xl px-6 py-3 rounded-2xl border border-violet-500/30 text-white flex items-center space-x-4">
+                        <div className="absolute inset-x-0 top-6 flex justify-center pointer-events-none">
+                            <div className="bg-black/70 backdrop-blur-xl px-5 py-2 rounded-2xl border border-violet-500/40 text-white flex items-center space-x-3 max-w-[90vw] md:max-w-xl">
                                 <div className={`w-3 h-3 rounded-full ${isFaceVisible ? 'bg-emerald-400 animate-pulse' : 'bg-red-400 animate-pulse'}`}></div>
-                                <span className="text-xs font-black uppercase tracking-[0.2em] text-cyan-400">
-                                    {faceStatus}
-                                </span>
+                                <span className="text-sm md:text-base font-bold text-cyan-300 leading-tight text-center whitespace-nowrap">{faceStatus}</span>
                             </div>
                         </div>
 
@@ -194,6 +211,8 @@ const CameraView = ({ onCapture, onClose, onError }) => {
             </div>
         </div>
     );
+
+    return typeof document !== 'undefined' ? createPortal(cameraContent, document.body) : cameraContent;
 };
 
 export default CameraView;

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 
 const AudioView = ({ onCapture, onClose, onError }) => {
     const [isRecording, setIsRecording] = useState(false);
@@ -8,11 +9,24 @@ const AudioView = ({ onCapture, onClose, onError }) => {
     const timerRef = useRef(null);
     const analyserRef = useRef(null);
     const animationFrameRef = useRef(null);
+    const streamRef = useRef(null);
     const [visualizerData, setVisualizerData] = useState(new Array(32).fill(10));
+
+    const stopAudio = useCallback(() => {
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop());
+            streamRef.current = null;
+        }
+        if (analyserRef.current) {
+            analyserRef.current.disconnect();
+            analyserRef.current = null;
+        }
+    }, []);
 
     const startRecording = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            streamRef.current = stream;
             mediaRecorderRef.current = new MediaRecorder(stream);
             audioChunksRef.current = [];
 
@@ -54,6 +68,7 @@ const AudioView = ({ onCapture, onClose, onError }) => {
             };
 
             mediaRecorderRef.current.start();
+            streamRef.current = stream;
             setIsRecording(true);
             setRecordingTime(0);
             timerRef.current = setInterval(() => {
@@ -72,9 +87,40 @@ const AudioView = ({ onCapture, onClose, onError }) => {
             setIsRecording(false);
             clearInterval(timerRef.current);
             cancelAnimationFrame(animationFrameRef.current);
-            mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+            if (mediaRecorderRef.current.stream) {
+                mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+            }
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(track => track.stop());
+                streamRef.current = null;
+            }
         }
     };
+
+    const closeAudio = useCallback(() => {
+        if (isRecording) {
+            stopRecording();
+        }
+        stopAudio();
+        onClose();
+    }, [isRecording, onClose, stopAudio]);
+
+    useEffect(() => {
+        return () => {
+            if (isRecording) {
+                stopRecording();
+            }
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(track => track.stop());
+            }
+            if (animationFrameRef.current) {
+                cancelAnimationFrame(animationFrameRef.current);
+            }
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
+        };
+    }, [isRecording]);
 
     const formatTime = (time) => {
         const m = Math.floor(time / 60);
@@ -82,16 +128,16 @@ const AudioView = ({ onCapture, onClose, onError }) => {
         return `${m}:${s < 10 ? '0' : ''}${s}`;
     };
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8 animate-in fade-in zoom-in-95 duration-500 overflow-hidden">
-            <div className="absolute inset-0 bg-[#0a0a12]/95 backdrop-blur-3xl" onClick={onClose}></div>
+    const audioContent = (
+        <div className="fixed top-0 bottom-0 left-72 right-0 z-40 flex items-center justify-center p-4 md:p-8 animate-in fade-in zoom-in-95 duration-500 overflow-hidden">
+            <div className="absolute inset-0 bg-[#0a0a12]/95 backdrop-blur-3xl" onClick={closeAudio}></div>
             
             <div className="relative w-full max-w-4xl aspect-video bg-[#12121e] rounded-[2.5rem] overflow-hidden shadow-[0_0_100px_rgba(139,92,246,0.3)] border border-violet-500/20 flex flex-col items-center justify-center p-12 group">
                 <div className="absolute inset-0 bg-gradient-to-br from-violet-600/10 to-transparent pointer-events-none"></div>
 
                 {/* Close Button */}
                 <button 
-                    onClick={onClose}
+                    onClick={closeAudio}
                     className="absolute top-8 right-8 w-12 h-12 rounded-2xl bg-black/40 hover:bg-red-500/20 text-white backdrop-blur-xl transition-all border border-white/10 flex items-center justify-center group/btn z-10"
                 >
                     <svg className="w-6 h-6 group-hover/btn:rotate-90 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -151,6 +197,8 @@ const AudioView = ({ onCapture, onClose, onError }) => {
             </div>
         </div>
     );
+
+    return typeof document !== 'undefined' ? createPortal(audioContent, document.body) : audioContent;
 };
 
 export default AudioView;
