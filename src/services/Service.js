@@ -2,27 +2,26 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
 
-// Lazy initialization of Gemini
-let genAI = null;
-let model = null;
-
-const getModel = () => {
+const getApiKey = () => {
     const rawKey = import.meta.env.VITE_GEMINI_API_KEY;
     console.log(`🔑 Key check: ${rawKey ? "Found (Starts with " + rawKey.substring(0, 4) + ")" : "Missing"}`);
-
-    if (!rawKey || typeof rawKey !== 'string' || rawKey.length < 5) return null;
-
-    if (!model) {
-        try {
-            genAI = new GoogleGenerativeAI(rawKey);
-            model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-        } catch (error) {
-            console.error("Failed to initialize Gemini:", error.message);
-            return null;
-        }
-    }
-    return model;
+    return rawKey && typeof rawKey === 'string' && rawKey.trim().length >= 5 ? rawKey.trim() : "";
 };
+
+const createModel = (modelName) => {
+    const apiKey = getApiKey();
+    if (!apiKey) return null;
+
+    try {
+        const ai = new GoogleGenerativeAI(apiKey);
+        return ai.getGenerativeModel({ model: modelName });
+    } catch (error) {
+        console.error(`Failed to initialize Gemini model ${modelName}:`, error.message);
+        return null;
+    }
+};
+
+const getModel = () => createModel("gemini-2.5-flash");
 
 const CONFIG = {
     temperature: 0.7,
@@ -153,31 +152,17 @@ const FALLBACK_PLAYLISTS = {
     ]
 };
 
-// Helper to get model by name
-const getModelByName = (name) => {
-    const rawKey = import.meta.env.VITE_GEMINI_API_KEY?.trim();
-    if (!rawKey) return null;
-    try {
-        const ai = new GoogleGenerativeAI(rawKey);
-        // Explicitly use the provided name, ensuring it has 'models/' prefix if needed
-        const modelName = name.startsWith('models/') ? name : `models/${name}`;
-        return ai.getGenerativeModel({ model: modelName });
-    } catch (e) {
-        return null;
-    }
-};
-
+// Keep this list limited to currently supported text-generation-capable models.
+// Deprecated names like gemini-pro / gemini-1.0-pro / gemini-1.5-flash can return 404.
 const MODELS_TO_TRY = [
-    "gemini-1.5-flash",
-    "gemini-1.5-flash-latest",
-    "gemini-pro",
-    "gemini-1.0-pro",
     "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.0-flash",
 ];
 
 export const generatePlaylist = async (emotion) => {
     for (const modelName of MODELS_TO_TRY) {
-        const model = getModelByName(modelName);
+        const model = createModel(modelName);
         if (!model) continue;
 
         try {
