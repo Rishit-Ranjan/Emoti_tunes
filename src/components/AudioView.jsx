@@ -56,9 +56,9 @@ const AudioView = ({ onCapture, onClose, onError }) => {
                 const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
                 // Simulate AER feature extraction
                 const mockAerFeatures = {
-                    pitch: 120 + Math.random() * 40,
-                    energy: 0.5 + Math.random() * 0.3,
-                    tempo: 100 + Math.random() * 20
+                    avgFreq: 120 + Math.random() * 100,
+                    avgEnergy: 0.3 + Math.random() * 0.6,
+                    stability: 0.4 + Math.random() * 0.5
                 };
                 onCapture({ 
                     audioData: audioBlob, 

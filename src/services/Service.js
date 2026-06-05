@@ -1,31 +1,41 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+// ML Model API Configuration
+const ML_API_BASE = import.meta.env.VITE_ML_API_URL || "http://localhost:5000";
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
-
-const getApiKey = () => {
-    const rawKey = import.meta.env.VITE_GEMINI_API_KEY;
-    console.log(`🔑 Key check: ${rawKey ? "Found (Starts with " + rawKey.substring(0, 4) + ")" : "Missing"}`);
-    return rawKey && typeof rawKey === 'string' && rawKey.trim().length >= 5 ? rawKey.trim() : "";
-};
-
-const createModel = (modelName) => {
-    const apiKey = getApiKey();
-    if (!apiKey) return null;
-
-    try {
-        const ai = new GoogleGenerativeAI(apiKey);
-        return ai.getGenerativeModel({ model: modelName });
-    } catch (error) {
-        console.error(`Failed to initialize Gemini model ${modelName}:`, error.message);
-        return null;
+const api = {
+    recognizeEmotion: async (audioFile) => {
+        const formData = new FormData();
+        formData.append('file', audioFile);
+        return fetch(`${ML_API_BASE}/api/recognize-emotion`, {
+            method: 'POST',
+            body: formData
+        });
+    },
+    
+    generatePlaylist: async (emotion, mood, numSongs = 10) => {
+        return fetch(`${ML_API_BASE}/api/generate-playlist`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ emotion, mood, num_songs: numSongs })
+        });
+    },
+    
+    analyzeAndGenerate: async (audioFile, numSongs = 10) => {
+        const formData = new FormData();
+        formData.append('file', audioFile);
+        formData.append('num_songs', numSongs);
+        return fetch(`${ML_API_BASE}/api/analyze-and-generate`, {
+            method: 'POST',
+            body: formData
+        });
+    },
+    
+    health: async () => {
+        return fetch(`${ML_API_BASE}/api/health`);
     }
 };
 
-const getModel = () => createModel("gemini-2.5-flash");
-
+// Configuration
 const CONFIG = {
-    temperature: 0.7,
-    maxOutputTokens: 1000,
     retryAttempts: 2,
     retryDelay: 1000,
 };
@@ -63,23 +73,7 @@ class ResponseCache {
     }
 }
 
-const emotionCache = new ResponseCache();
-
-// Clean JSON string
-const cleanJsonString = (responseText) => {
-    let jsonText = responseText.trim();
-
-    // Remove markdown code blocks
-    const jsonMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (jsonMatch) {
-        jsonText = jsonMatch[1].trim();
-    }
-
-    // Fix trailing commas
-    jsonText = jsonText.replace(/,\s*}/g, '}').replace(/,\s*\]/g, ']');
-
-    return jsonText;
-};
+const playlistCache = new ResponseCache();
 
 // Retry wrapper
 const withRetry = async (fn, context, retries = CONFIG.retryAttempts) => {
@@ -94,230 +88,155 @@ const withRetry = async (fn, context, retries = CONFIG.retryAttempts) => {
     }
 };
 
-// Fallback playlists with verified YouTube IDs
+// Fallback playlists for when API is unavailable
 const FALLBACK_PLAYLISTS = {
-    'Joy': [
-        { title: "Happy", artist: "Pharrell Williams", youtubeId: "y6Sxv-sUYtM" },
-        { title: "Walking on Sunshine", artist: "Katrina and the Waves", youtubeId: "iPUmE-tne5U" },
-        { title: "Can't Stop the Feeling!", artist: "Justin Timberlake", youtubeId: "ru0K8uYEZWw" },
-        { title: "Uptown Funk", artist: "Mark Ronson ft. Bruno Mars", youtubeId: "OPf0YbXqDm0" },
-        { title: "Good Vibrations", artist: "The Beach Boys", youtubeId: "Eab_beh07HU" },
-        { title: "September", artist: "Earth, Wind & Fire", youtubeId: "Gs069dndIYk" },
-        { title: "Best Day of My Life", artist: "American Authors", youtubeId: "Y66j_BUCBMY" },
-        { title: "I Gotta Feeling", artist: "The Black Eyed Peas", youtubeId: "uSD4vsh1zDA" },
-        { title: "Shut Up and Dance", artist: "Walk The Moon", youtubeId: "6JCLY0Rlx6Q" },
-        { title: "Roar", artist: "Katy Perry", youtubeId: "CevxZvSJLk8" }
+    'calm': [
+        { title: "Weightless", artist: "Marconi Union", duration: 480, bpm: 60 },
+        { title: "Music for Airports", artist: "Brian Eno", duration: 1260, bpm: 55 },
+        { title: "Sunrise", artist: "Ólafur Arnalds", duration: 240, bpm: 65 },
+        { title: "Re: Stacks", artist: "Bon Iver", duration: 300, bpm: 70 },
+        { title: "Nuvole Bianche", artist: "Ludovico Einaudi", duration: 270, bpm: 68 },
     ],
-    'Sadness': [
-        { title: "Someone Like You", artist: "Adele", youtubeId: "hLQl3WQQoQ0" },
-        { title: "Fix You", artist: "Coldplay", youtubeId: "k4V3Mo61fJM" },
-        { title: "The Sound of Silence", artist: "Simon & Garfunkel", youtubeId: "4zLfCnGVeL4" },
-        { title: "Yesterday", artist: "The Beatles", youtubeId: "jo505ZyaCbA" },
-        { title: "Hurt", artist: "Johnny Cash", youtubeId: "8AHCfZTRGiI" },
-        { title: "All I Want", artist: "Kodaline", youtubeId: "mtf7hC17IBM" },
-        { title: "Skinny Love", artist: "Bon Iver", youtubeId: "ssdgFoHLwnk" },
-        { title: "Stay With Me", artist: "Sam Smith", youtubeId: "pB-5XG-DbAA" },
-        { title: "Let Her Go", artist: "Passenger", youtubeId: "RBumgq5yVrA" },
-        { title: "Tears in Heaven", artist: "Eric Clapton", youtubeId: "JxPj3GAYYZ0" }
+    'happy': [
+        { title: "Walking On Sunshine", artist: "Katrina & The Waves", duration: 240, bpm: 128 },
+        { title: "Good As Hell", artist: "Lizzo", duration: 160, bpm: 98 },
+        { title: "Levitating", artist: "Dua Lipa", duration: 203, bpm: 103 },
+        { title: "Electric Feel", artist: "MGMT", duration: 234, bpm: 105 },
+        { title: "Shut Up and Dance", artist: "Walk the Moon", duration: 210, bpm: 115 },
     ],
-    'Anger': [
-        { title: "Break Stuff", artist: "Limp Bizkit", youtubeId: "ZpUYjpKg9KY" },
-        { title: "In the End", artist: "Linkin Park", youtubeId: "eVTXPUF4Oz4" },
-        { title: "Smells Like Teen Spirit", artist: "Nirvana", youtubeId: "hTWKbfoikeg" },
-        { title: "Du Hast", artist: "Rammstein", youtubeId: "W3q8Od5qJio" },
-        { title: "Down with the Sickness", artist: "Disturbed", youtubeId: "09LTT0rkYls" },
-        { title: "Headstrong", artist: "Trapt", youtubeId: "HTvu1Yr3Ohk" }
+    'energetic': [
+        { title: "Eye of the Tiger", artist: "Survivor", duration: 246, bpm: 108 },
+        { title: "Pump It Up", artist: "Endor", duration: 233, bpm: 128 },
+        { title: "Kickstart My Heart", artist: "Mötley Crüe", duration: 239, bpm: 112 },
+        { title: "We Will Rock You", artist: "Queen", duration: 302, bpm: 78 },
+        { title: "Thunderstruck", artist: "AC/DC", duration: 292, bpm: 120 },
     ],
-    'Excitement': [
-        { title: "Eye of the Tiger", artist: "Survivor", youtubeId: "btPJPFnesVw" },
-        { title: "Don't Stop Me Now", artist: "Queen", youtubeId: "HgzGwKwLmgM" },
-        { title: "Lose Yourself", artist: "Eminem", youtubeId: "_Yhyp-_hX2s" },
-        { title: "Levels", artist: "Avicii", youtubeId: "_ovdm2yX4MA" },
-        { title: "Wake Me Up", artist: "Avicii", youtubeId: "IcrbM1l_BoI" }
+    'uplifting': [
+        { title: "Here Comes the Sun", artist: "The Beatles", duration: 185, bpm: 129 },
+        { title: "Three Little Birds", artist: "Bob Marley", duration: 181, bpm: 76 },
+        { title: "Don't Stop Me Now", artist: "Queen", duration: 236, bpm: 156 },
+        { title: "I Will Survive", artist: "Gloria Gaynor", duration: 315, bpm: 117 },
+        { title: "Believer", artist: "Imagine Dragons", duration: 204, bpm: 123 },
     ],
-    'Melancholy': [
-        { title: "Video Games", artist: "Lana Del Rey", youtubeId: "cE6wxDqdOV0" },
-        { title: "The Night We Met", artist: "Lord Huron", youtubeId: "KtlgYxa6BMU" },
-        { title: "Summertime Sadness", artist: "Lana Del Rey", youtubeId: "TdrL3QxjyVw" }
-    ],
-    'Peaceful': [
-        { title: "Weightless", artist: "Marconi Union", youtubeId: "UfcAVejslrU" },
-        { title: "River Flows in You", artist: "Yiruma", youtubeId: "7maJOI3QMu0" },
-        { title: "Banana Pancakes", artist: "Jack Johnson", youtubeId: "OkyrIRyrW60" }
-    ],
-    'default': [
-        { title: "Bohemian Rhapsody", artist: "Queen", youtubeId: "fJ9rUzIMcZQ" },
-        { title: "Hotel California", artist: "Eagles", youtubeId: "09839DpTctU" },
-        { title: "Billie Jean", artist: "Michael Jackson", youtubeId: "Zi_XLOBDo_Y" }
-    ]
 };
 
-// Keep this list limited to currently supported text-generation-capable models.
-// Deprecated names like gemini-pro / gemini-1.0-pro / gemini-1.5-flash can return 404.
-const MODELS_TO_TRY = [
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-2.0-flash",
-];
-
-export const generatePlaylist = async (emotion) => {
-    for (const modelName of MODELS_TO_TRY) {
-        const model = createModel(modelName);
-        if (!model) continue;
-
-        try {
-            console.log(`📡 Vibe Sync: Attempting ${modelName}...`);
-            const prompt = `Generate a fresh, unique, and diverse playlist of 10 songs that perfectly capture the feeling of '${emotion}'. 
-
-Return ONLY a valid JSON object with this exact structure:
-{
-    "songs": [
-        {"title": "Song Title", "artist": "Artist Name", "youtubeId": "XXXXXXXXXXX"}
-    ]
-}
-
-Ensure youtubeId is accurate. No conversational text.`;
-
-            const result = await model.generateContent(prompt);
-            const response = await result.response;
-            const text = await response.text();
-            
-            const jsonText = cleanJsonString(text);
-            let parsed;
-            try {
-                parsed = JSON.parse(jsonText);
-            } catch (parseErr) {
-                console.error('JSON Parse error:', parseErr.message);
-                console.log('Raw response snippet:', text.substring(0, 200));
-                continue; // Try next model
-            }
-            
-            if (parsed && (parsed.songs || Array.isArray(parsed))) {
-                console.log(`✅ Intelligence Link Established: ${modelName}`);
-                // Filter valid songs
-                const validSongs = (parsed.songs || parsed).filter(song => 
-                    song && song.title && song.youtubeId && /^[a-zA-Z0-9_-]{11}$/.test(song.youtubeId)
-                );
-                return validSongs.length > 0 ? validSongs : parsed.songs || parsed;
-            }
-        } catch (error) {
-            console.error(`❌ Model ${modelName} Connection Failed:`, error.message);
-            // If it's a 429, we might want to wait, but for 404 we skip immediately
-        }
-    }
-
-    console.warn("⚠️ System Fallback: All AI models offline. Activating Curated Vibe protocols.");
-    return getFallback(emotion);
-};
-
-const getFallback = (emotion) => {
-    let fallbackKey = emotion;
-    if (!FALLBACK_PLAYLISTS[fallbackKey]) {
-        if (emotion.includes('Joy')) fallbackKey = 'Joy';
-        else if (emotion.includes('Sad')) fallbackKey = 'Sadness';
-        else if (emotion.includes('Anger')) fallbackKey = 'Anger';
-        else fallbackKey = 'default';
-    }
-    return FALLBACK_PLAYLISTS[fallbackKey];
-};
-
-// Emotion detection using Gemini 1.5 Flash Vision
-export const detectEmotionFromImage = async (base64ImageData) => {
-    console.log("📸 Vision-based Emotion Recognition via Gemini 1.5 Flash");
-    const model = getModel();
-    if (!model) return "Joy";
-
+// Generate playlist from emotion
+export const generatePlaylist = async (emotion, numSongs = 10) => {
     try {
-        const prompt = "Identify the primary facial emotion of the person in this image. Respond ONLY with one of these words: Joy, Sadness, Anger, Excitement, Melancholy, Peaceful, Joy-Anger, Joy-Surprise, Joy-Excitement, Sad-Anger.";
+        console.log(`🎵 Generating playlist for emotion: ${emotion}`);
+        
+        const response = await withRetry(async () => {
+            return await api.generatePlaylist(emotion, 'mixed', numSongs);
+        }, `playlist generation for ${emotion}`);
 
-        // Strip data URL prefix if present
-        const cleanBase64 = base64ImageData.includes(',') ? base64ImageData.split(',')[1] : base64ImageData;
-
-        const result = await model.generateContent([
-            {
-                inlineData: {
-                    data: cleanBase64,
-                    mimeType: "image/jpeg"
-                }
-            },
-            prompt
-        ]);
-
-        const response = await result.response;
-        let text = (await response.text()).trim().toLowerCase().replace(/[^a-z-]/g, '');
-        const moods = ['joy-anger', 'joy-surprise', 'joy-excitement', 'sad-anger', 'joy', 'sadness', 'anger', 'excitement', 'melancholy', 'peaceful'];
-
-        const matchedMood = moods.find(m => text.includes(m));
-        if (matchedMood) {
-            return matchedMood.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('-');
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
         }
 
-        return 'Joy';
+        const data = await response.json();
+        const songs = data.songs || [];
+        
+        if (songs.length > 0) {
+            console.log(`✅ Generated playlist with ${songs.length} songs`);
+            playlistCache.set(emotion, songs);
+            return songs;
+        } else {
+            throw new Error('No songs in response');
+        }
     } catch (error) {
-        console.warn("⚠️ Vision analysis failed. Falling back to Joy:", error.message);
-        return 'Joy';
+        console.error(`❌ Playlist generation failed:`, error.message);
+        console.warn('⚠️ Using fallback playlist');
+        const mood = emotion.toLowerCase();
+        return FALLBACK_PLAYLISTS[mood] || FALLBACK_PLAYLISTS.happy;
     }
 };
 
-export const detectEmotionFromAudio = async (base64AudioData, mimeType, aerFeatures) => {
-    console.log("🎤 Audio Emotion Recognition (AER) via native audio + wave features:", aerFeatures);
-    const model = getModel();
-    if (!model) return "Joy";
-    if (!aerFeatures || !base64AudioData) return 'Joy';
-
+// Emotion detection from audio file
+export const detectEmotionFromAudio = async (audioFile) => {
+    console.log("🎤 Audio Emotion Recognition (AER) via ML Model");
+    
     try {
-        const prompt = `Perform Audio Emotion Recognition (AER) utilizing both the raw audio file and the following extracted features:
-- Average Energy (Volume): ${aerFeatures.avgEnergy.toFixed(2)}
-- Average Peak Frequency (Pitch): ${aerFeatures.avgFreq.toFixed(2)} Hz
-- Vocal Stability (Variance): ${aerFeatures.stability.toFixed(2)}
+        const response = await withRetry(async () => {
+            return await api.recognizeEmotion(audioFile);
+        }, 'emotion detection');
 
-Listen to the attached audio recording to capture the user's exact tonality and emotion.
-Identify the user's emotion. Respond ONLY with one of these exact words: Joy, Sadness, Anger, Excitement, Melancholy, Peaceful, Joy-Anger, Joy-Surprise, Joy-Excitement, Sad-Anger.`;
-
-        const cleanBase64 = base64AudioData.includes(',') ? base64AudioData.split(',')[1] : base64AudioData;
-
-        const result = await model.generateContent([
-            {
-                inlineData: {
-                    data: cleanBase64,
-                    mimeType: mimeType || "audio/webm"
-                }
-            },
-            prompt
-        ]);
-        const response = await result.response;
-        let text = (await response.text()).trim().toLowerCase().replace(/[^a-z-]/g, '');
-
-        const moods = ['joy-anger', 'joy-surprise', 'joy-excitement', 'sad-anger', 'joy', 'sadness', 'anger', 'excitement', 'melancholy', 'peaceful'];
-        const matchedMood = moods.find(m => text.includes(m));
-
-        if (matchedMood) {
-            return matchedMood.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('-');
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
         }
 
-        return 'Joy';
+        const data = await response.json();
+        const emotion = data.predicted_emotion || 'joy';
+        
+        console.log(`✅ Detected emotion: ${emotion} (confidence: ${(data.confidence * 100).toFixed(1)}%)`);
+        return emotion;
     } catch (error) {
-        console.warn("⚠️ AER analysis failed, falling back to Joy:", error.message);
-        return 'Joy';
+        console.error(`❌ Emotion detection failed:`, error.message);
+        console.warn('⚠️ Defaulting to joy');
+        return 'joy';
     }
 };
 
-// Health check
-export const checkFoundryHealth = async () => {
-    const model = getModel();
-    if (!model) return { healthy: false, message: "❌ Gemini API Key missing or invalid" };
+// Complete analysis pipeline: detect emotion + generate playlist
+export const analyzeAndGeneratePlaylist = async (audioFile, numSongs = 10) => {
+    console.log("🎵 Starting complete analysis pipeline...");
+    
     try {
-        const result = await model.generateContent("hi");
-        const response = await result.response;
+        const response = await withRetry(async () => {
+            return await api.analyzeAndGenerate(audioFile, numSongs);
+        }, 'analysis and playlist generation');
+
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const emotionAnalysis = data.emotion_analysis;
+        const playlistData = data.playlist;
+        
+        console.log(`✅ Analysis complete:`);
+        console.log(`   - Emotion: ${emotionAnalysis.predicted_emotion}`);
+        console.log(`   - Confidence: ${(emotionAnalysis.confidence * 100).toFixed(1)}%`);
+        console.log(`   - Playlist songs: ${playlistData.song_count}`);
+        
         return {
-            healthy: !!(await response.text()),
-            message: '✅ Gemini API is working'
+            emotion: emotionAnalysis.predicted_emotion,
+            confidence: emotionAnalysis.confidence,
+            playlist: playlistData.songs,
+            all_emotions: emotionAnalysis.all_emotions
         };
+    } catch (error) {
+        console.error(`❌ Pipeline failed:`, error.message);
+        throw error;
+    }
+};
+
+// Health check - verify ML API is running
+export const checkMLHealth = async () => {
+    try {
+        const response = await api.health();
+        
+        if (response.ok) {
+            const data = await response.json();
+            return {
+                healthy: true,
+                message: '✅ ML API is running',
+                components: data.components
+            };
+        } else {
+            return {
+                healthy: false,
+                message: '❌ ML API returned error: ' + response.status,
+                error: response.status
+            };
+        }
     } catch (error) {
         return {
             healthy: false,
-            error: error.message,
-            message: '❌ Could not connect to Gemini service'
+            message: `❌ Cannot connect to ML API at ${ML_API_BASE}`,
+            error: error.message
         };
     }
 };
+
+// Legacy function for backward compatibility
+export const checkFoundryHealth = checkMLHealth;
