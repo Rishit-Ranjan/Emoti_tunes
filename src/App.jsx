@@ -6,7 +6,6 @@ import PlaylistDisplay from './components/PlaylistDisplay';
 import Loader from './components/Loader';
 import CameraView from './components/CameraView';
 import AudioView from './components/AudioView';
-import ProfileView from './components/ProfileView';
 import LibraryView from './components/LibraryView';
 
 const OfflineBanner = () => (<div className="fixed top-0 left-0 right-0 bg-slate-800 border-b border-yellow-500/30 text-center p-2 text-sm text-yellow-300 z-50 flex items-center justify-center shadow-lg" role="status">
@@ -192,13 +191,6 @@ const App = () => {
         );
 
         switch (view) {
-            case 'profile': return <ProfileView 
-                currentVibe={currentEmotion?.name || 'Joy'} 
-                recentPlaylists={recentPlaylists}
-                userPlaylists={userPlaylists}
-                onPlaylistSelect={handleSelectSavedPlaylist}
-                onBack={goBack} 
-            />;
             case 'camera': return <CameraView onCapture={handleCapture} onClose={goBack} onError={setError}/>;
             case 'mic': return <AudioView onCapture={handleAudioCapture} onClose={goBack} onError={setError}/>;
             case 'playlist': return (
@@ -329,15 +321,6 @@ const App = () => {
                                 className="w-80 min-w-[240px] bg-[#0f1223] border border-white/10 rounded-full py-3 px-5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400/40"
                             />
                         </div>
-                        <button className="flex items-center space-x-4 bg-black/60 backdrop-blur-xl py-2 px-5 rounded-full border border-white/10 group active:scale-95 transition-all text-left" onClick={() => navigateTo('profile')}>
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-violet-600 to-cyan-400 p-0.5">
-                                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=Rishit%20Ranjan`} className="w-full h-full rounded-full bg-black shadow-inner" alt="" />
-                            </div>
-                            <div className="hidden lg:block">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-white/70 group-hover:text-white transition-colors block leading-none">Rishit Ranjan</span>
-                                <span className="text-[8px] font-bold text-cyan-400/50 uppercase tracking-[0.2em] leading-none">Pro Member</span>
-                            </div>
-                        </button>
                     </div>
                 </header>
 
