@@ -319,9 +319,7 @@ const geminiGenerate = async ({ systemPrompt, userPrompt }) => {
   // Try multiple model IDs in order. This avoids hardcoding one model that may be disabled/renamed.
   // Also attempt to discover models from the account, and intersect with the preferred list.
   const preferredFallbacks = [
-    'gemini-1.5-flash',
-    'gemini-1.5-pro',
-    'gemini-1.0-pro'
+    'gemini-2.5-flash',
   ];
 
   let discovered = null;
