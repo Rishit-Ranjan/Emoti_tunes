@@ -54,13 +54,37 @@ def parse_ravdess_label(file_path):
     return EMOTION_MAP.get(emotion_code)
 
 
-def load_dataset(data_dir, ext='wav'):
+def parse_tess_label(file_path):
+    basename = os.path.basename(file_path).lower()
+    parent_folder = os.path.basename(os.path.dirname(file_path)).lower()
+
+    if 'angry' in basename or 'angry' in parent_folder:
+        return 'Anger'
+    if 'disgust' in basename or 'disgust' in parent_folder:
+        return 'Anger'
+    if 'fear' in basename or 'fear' in parent_folder:
+        return 'Melancholy'
+    if 'happy' in basename or 'happy' in parent_folder:
+        return 'Joy'
+    if 'sad' in basename or 'sadness' in basename or 'sad' in parent_folder or 'sadness' in parent_folder:
+        return 'Sadness'
+    if 'neutral' in basename or 'neutral' in parent_folder:
+        return 'Peaceful'
+    if 'surprise' in basename or 'pleasant' in basename or 'surprise' in parent_folder or 'pleasant' in parent_folder:
+        return 'Joy-Surprise'
+    return None
+
+
+def load_dataset(data_dir, dataset_type='ravdess', ext='wav'):
     samples = []
     labels = []
     search_pattern = os.path.join(data_dir, f'**/*.{ext}')
 
     for file_path in tqdm(glob(search_pattern, recursive=True), desc='Loading audio files'):
-        label = parse_ravdess_label(file_path)
+        if dataset_type == 'tess':
+            label = parse_tess_label(file_path)
+        else:
+            label = parse_ravdess_label(file_path)
         if not label:
             continue
         features = extract_features(file_path)
@@ -90,7 +114,7 @@ def build_model(input_shape, num_classes):
 
 def main(args):
     print('Loading dataset...')
-    X, y = load_dataset(args.data_dir, ext=args.ext)
+    X, y = load_dataset(args.data_dir, dataset_type=args.dataset_type, ext=args.ext)
     if len(X) == 0:
         raise ValueError('No audio files found. Check your dataset path and extension.')
 
@@ -128,6 +152,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train an audio emotion recognition model.')
     parser.add_argument('--data-dir', required=True, help='Path to audio dataset root directory')
+    parser.add_argument('--dataset-type', default='ravdess', choices=['ravdess', 'tess'], help='Dataset type to parse labels for')
     parser.add_argument('--output-model', default='training/models/aer_model.h5', help='Output path for the saved Keras model')
     parser.add_argument('--ext', default='wav', help='Audio file extension to load')
     parser.add_argument('--epochs', type=int, default=30, help='Number of training epochs')
